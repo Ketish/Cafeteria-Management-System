@@ -1,13 +1,16 @@
 #include <iostream>
+#include <ctime>
 #include <fstream>
 #include <string>
+#include <array>
 #include <iomanip>
 
 using namespace std;
 
 struct User{
-    int id=NULL, type=NULL;
-    string name="", pin="";
+    string name="", password="";
+    int privilege=4;
+    float balance=0.0;
 };
 struct Item{
     string disc = "";
@@ -17,26 +20,30 @@ struct Item{
 };
 void reload();
 void addUser();
+void extendUser();
 void addToMenu();
 void order();
 void listOrders();
 void updateItems();
 void login();
 void welcome();
-bool is_match(int, string);
-User users[10];
-Item items[25];
+bool is_match(string, string);
+void clearLines(int);
+int userIndex(string);
+
+array<User, 10> users;
+array<Item, 10> items;
 int nUsers = 0;
 int nItems = 0;
 User currentUser;
-string menuFileName = "src/menu.dat";
-string userFileName = "src/users.dat";
-string orderFileName = "src/order.dat";
-void clearLines(int);
-
+string menuFileName = "data/menu.dat";
+string userFileName = "data/users.dat";
+string orderFileName = "data/order.dat";
 
 int main()
 {
+    cout << setprecision(2) << fixed;
+    order();
     reload();
     login();
     return 0;
@@ -44,37 +51,40 @@ int main()
 
 
 void reload(){
-    ofstream uFile(userFileName, ios::app); // to assert the file exists.
+    ofstream uFile(userFileName.c_str(), ios::app); // to assert the file exists.
     uFile.close();
 
-    ifstream userFile(userFileName);
+    ifstream userFile(userFileName.c_str());
     if(!userFile.fail()){
-        string username, pin;
-        int id, type;
-        userFile >> id >> type >> username >> pin;
+        string username, password;
+        int privilege;
+        float balance;
+        userFile >> username >> password >> privilege >> balance;
         if(!userFile.good()){
         //incase the file is empty create admin user
-        User admin = {111+nUsers++, 0, "admin", "0123"};
+        User admin = {"admin", "admin", 0, 0};
         users[0] = admin;
-        ofstream uFile(userFileName, ios::app); // to assert the file exists.
-        uFile << admin.id << " " << admin.type << " "<< admin.name << " " << admin.pin<<endl;
+        ofstream uFile(userFileName.c_str(), ios::app); // to assert the file exists.
+        uFile << admin.name << " " << admin.password << " "<< admin.privilege << " " << admin.balance <<endl;
         uFile.close();
         }
-
+        else{
         do{
-            User user = {id, type, username, pin};
+            if(nUsers>=size(users)) { extendUser(); }
+            User user = {username, password, privilege, balance};
             users[nUsers++] = user;
-            userFile >> id >> type >> username >> pin;
+            userFile >> username >> password >> privilege >> balance;
         }while (userFile.good());
         userFile.close();
+        }
     }
     else{
-        cout << "Cannot open the file: "<<userFileName<<endl;
+        cout << "Cannot open the file: "<<userFileName.c_str()<<endl;
     }
 
-    ofstream mFile(menuFileName, ios::app); // to assert the file exists.
+    ofstream mFile(menuFileName.c_str(), ios::app); // to assert the file exists.
     mFile.close();
-    ifstream menuFile(menuFileName);
+    ifstream menuFile(menuFileName.c_str());
     if(!menuFile.fail()){
         string disc;
         float price;
@@ -92,7 +102,7 @@ void reload(){
         menuFile.close();
     }
     else{
-        cout << "Cannot open the file: "<<menuFileName<<endl;
+        cout << "Cannot open the file: "<<menuFileName.c_str()<<endl;
     }
 }
 
@@ -111,38 +121,46 @@ void clearLines(int li){
 void logout(){
     clearLines(20);
     cout << "you have logged out, login again!\n";
-    currentUser={0,5,"",""};
+    currentUser={"","",4,0};
     login();
 }
 void login(){
-    int userId;
-    string pin;
+    string username, password;
     cout << "CAFETERIA MANAGEMENT SYSTEM, LOGIN PAGE." << endl;
-    cout << "Enter user id : ";
-    cin >> userId;
-    cout << "Enter pin : ";
-    cin >> pin;
-    if(userId>110 && userId<120 && is_match(userId, pin)){
-        currentUser = users[userId-111];
-        clearLines(4);
+    cout << "Enter username : ";
+    cin >> username;
+    cout << "Enter password : ";
+    cin >> password;
+    if(is_match(username, password)){
+        currentUser = users[userIndex(username)];
         welcome();
     }
     else{
         clearLines(4);
-        cout << "\x1b[31mIncorrect ID or PIN, Please! try again\n.\033[0m" <<endl;
+        cout << "\x1b[31mIncorrect USERNAME or PIN, Please! try again\n.\033[0m" <<endl;
         login();
     }
 }
-bool is_match(int userId, string pin){
-    return users[userId-111].pin == pin;
+
+int userIndex(string username){
+    for(int i=0; i<nUsers; i++){
+        if(users[i].name==username){return i;}
+    }
 }
+bool is_match(string username, string password){
+    return users[userIndex(username)].password == password;
+}
+
 void welcome(){
-    clearLines(3);
-    int userId = currentUser.id;
+    clearLines(20);
     cout << "WELCOME TO PRO CAFE, CAFETERIA MANAGEMENT SYSTEM!\n";
-    cout <<left<<setw(10)<< "\x1b[32musername: " << currentUser.name<<endl;
-    cout <<setw(10)<< "userid: " << userId<< "\033[0m\n";
-    int privilege = currentUser.type;
+    cout <<left<< "\x1b[32mlogged in as: " << currentUser.name <<endl
+         <<"your balance: " << currentUser.balance<< "\033[0m\n";
+
+    cout << "\t\t\tOPTIONS\n";
+    cout<<"\t============================================\n";
+
+    int privilege = currentUser.privilege;
     int cmd=0;
     switch(privilege){
     case 0: goto admin;
@@ -151,16 +169,18 @@ void welcome(){
     default: goto cheifOrBarista;
     }
     admin:
-    cout << "press 1 - to see statistics\n";
-    cout << "press 2 - to add new user\n";
+    cout << "\t||\tpress 1 - to see statistics       ||\n";
+    cout << "\t||\tpress 2 - to add new user         ||\n";
     cashier:
-    cout << "press 3 - to add new item to menu\n";
+    cout << "\t||\tpress 3 - to add new item to menu ||\n";
     cheifOrBarista:
-    cout << "press 4 - to see active orders\n";
-    cout << "press 5 - to set availability\n";
+    cout << "\t||\tpress 4 - to see active orders    ||\n";
+    cout << "\t||\tpress 5 - to set availability     ||\n";
     customer:
-    cout << "press 6 - to order food or drink\n";
-    cout << "press 7 - to logout\n";
+    cout << "\t||\tpress 6 - to order food or drink  ||\n";
+    cout << "\t||\tpress 7 - to logout               ||\n";
+    cout << "\t--------------------------------------------\n";
+
 
     prompt:
     cout << "Enter you choice: ";
@@ -197,27 +217,31 @@ void welcome(){
 }
 
 void addUser(){
-    if(currentUser.type == 0){
-        string username, pin;
-        int type, id = 111+nUsers;
+    if(currentUser.privilege == 0){
+        string username, password;
+        int privilege;
+        float balance;
         cout << "What type of user you want to add?" <<"\n0 for admin\n1 for cachier\n2 for chief\n3 for barista\n4 for customer\n";
         cout << "Enter user privilege : ";
-        cin >> type;
+        cin >> privilege;
         cout << "Enter username : ";
         cin >> username;
-        cout << "Enter pin : ";
-        cin >> pin;
-        User newUser = {id, type, username, pin};
+        cout << "Enter password : ";
+        cin >> password;
+        cout << "Enter amount of initial balance: ";
+        cin >> balance;
+        User newUser = {username, password, privilege, balance};
+        if(nUsers>=size(users)) { extendUser(); }
         users[nUsers++] = newUser;
         cout << "\x1b[34msuccessfully created new user\n";
         cout <<left<<setw(10)<< "username: " << newUser.name<<endl;
-        cout <<setw(10)<< "userid: " << newUser.id<<endl;
-        cout <<setw(10)<< "pin: " << newUser.pin<< "\033[0m\n";
+        cout <<setw(10)<< "password: " << newUser.password<<endl;
+        cout <<setw(10)<< "Balance: " << newUser.balance<< "\033[0m\n";
 
-        ofstream userFile(userFileName, ios::app);
+        ofstream userFile(userFileName.c_str(), ios::app);
         if(!userFile.fail()){
             userFile<< setiosflags(ios::fixed);
-            userFile << 111+nUsers << " " << type << " "<< username << " " << pin<<endl;
+            userFile << username << " " << password << " "<< privilege << " " << balance <<endl;
             userFile.close();
             char cmd;
             cout << "Do you want to add more? y/n ";
@@ -226,7 +250,7 @@ void addUser(){
             cmd=='y'?addUser():welcome();
         }
         else{
-            cout << "Sorry! Couldn't open file " << userFileName << endl;
+            cout << "Sorry! Couldn't open file " << userFileName.c_str() << endl;
         }
     }
     else{
@@ -247,7 +271,7 @@ void addToMenu(){
     cin >> price;
     Item newItem={disc, price, true, fOd=='f'};
     items[nItems++] = newItem;
-    ofstream menuFile(menuFileName, ios::app);
+    ofstream menuFile(menuFileName.c_str(), ios::app);
     if(!menuFile.fail()){
         menuFile << setiosflags(ios::fixed) << setiosflags(ios::showpoint) << setprecision(2);
         menuFile << disc << " " << price << " " << (fOd=='f') <<endl;
@@ -284,24 +308,29 @@ void order(){
     int ids[25];
     int countOrder = 0;
     float subtotal = 0;
-    cout << "for example\x1b[1;47;34m 0 2 \x1b[0mfor 2 " << items[0].disc << "\n"
+    cout << "for example\x1b[1;47;34m 2 0 \x1b[0mfor 2 " << items[0].disc << "\n"
          << "Enter negative number to finish the order\n";
     for(int i=0; i<25; i++){
         cout << "Enter your order: ";
         int qty;
-        cin >> ids[i];
-        if(ids[i]<0){
+        cin >> qty;
+        if(qty<0){
         break;
         };
-        cin >> qty;
+        cin >> ids[i];
         orders[i] = {items[ids[i]], qty};
         subtotal += orders[i].amount;
         countOrder++;
     };
-    cout << endl << left << setw(15) <<"DISCRIPTION" << '\t' << setw(3)
+    time_t now = time(0);
+    tm dateTime = *localtime(&now);
+    cout << setfill('0') << right
+        << endl << "Date: " <<setw(2)<< dateTime.tm_mday << "/" <<setw(2)<< 1 + dateTime.tm_mon << "/"
+        <<setw(4)<< 1900 + dateTime.tm_year
+        << endl << "Time: " <<setw(2) << dateTime.tm_hour << ":" <<setw(2) << dateTime.tm_min
+        << endl << left << setw(15) <<"DISCRIPTION" << '\t' << setw(3)
          <<"QTY" << '\t' << setw(6) << "PRICE" << '\t' << setw(9) << "AMOUNT" << endl
-         << setfill('-') << setw(44) <<"" << setfill(' ') <<endl
-         << setprecision(2) << fixed;
+         << setfill('-') << setw(44) <<"" << setfill(' ') <<endl;
 
     for(int i=0; i<10; i++){
       if(orders[i].qty != 0){
@@ -315,7 +344,7 @@ void order(){
     cout <<left<< setw(5) << "TAX" <<right<< setw(34) << tax << endl;
     cout <<left<< setw(5) << "TOTAL" <<right<< setw(34) << subtotal + tax << endl;
 
-    if (currentUser.type < 2){
+    if (currentUser.privilege < 2){
         goto pay;
     }
     cout << "Sorry you have to pay!\n";
@@ -329,7 +358,7 @@ void order(){
     order();
     }
 
-    ofstream orderFile(orderFileName, ios::app);
+    ofstream orderFile(orderFileName.c_str(), ios::app);
     if(!orderFile.fail()){
         orderFile << setiosflags(ios::fixed) << setiosflags(ios::showpoint) << setprecision(2);
         orderFile << countOrder << '\t';
@@ -369,6 +398,19 @@ void updateItems(){
     cin >> cmd;
     items[id].isAvail = cmd=='y';
     welcome();
+}
+
+
+void extendUser(){
+    const int s = size(users);
+    array<User, s> temp = users;
+
+    array<User, 2*s> users;
+    for(int i=0; i<s; i++){
+        users[i] = temp[i];
+    }
+    delete &s;
+    delete &temp;
 }
 /*
 void printe(string str){
